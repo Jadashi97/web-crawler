@@ -1,6 +1,29 @@
 // const normalizedURL = ()=>{
 //     console.log("Yay gotcha!!");
 // };
+const {JSDOM } = require('jsdom');
+
+function getURLsFromHTML(htmlBody, baseURL){
+    const urls = []
+    const dom = new JSDOM(htmlBody)
+    const aElements = dom.window.document.querySelectorAll('a')
+    for(const aElement of aElements){
+        if(aElement.href.slice(0,1)=== '/'){
+            try{
+                urls.push(new URL(aElement.href, baseURL).href)
+            }catch(err){
+                console.log(`${err.message}: ${aElement.href}`)
+            }
+        } else {
+            try {
+                urls.push(new URL(aElement.href).href)
+            } catch (err){
+                console.log(`${err.message}: ${aElement.href}`)
+            }
+        }
+    }
+    return urls
+}
 
 function normalizedURL(url){
     const urlObj = new URL(url)
@@ -11,6 +34,8 @@ function normalizedURL(url){
     return fullPath
 }
 
+
 module.exports = {
-    normalizedURL
+    normalizedURL,
+    getURLsFromHTML
 }
