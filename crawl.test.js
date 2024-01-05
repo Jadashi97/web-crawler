@@ -7,3 +7,4 @@ test('normalizeURL protocol', () => {
     const expected = 'blog.boot.dev/path'
     expect(actual).toEqual(expected)
 })
+
