@@ -1,8 +1,9 @@
 const {JSDOM } = require('jsdom');
-const fetch = require('node-fetch');
+// const fetch = require('node-fetch');
 
 async function crawlPage(baseURL, currentURL, pages = {}){
 
+    // if this is an offsite URL, bail immediately
     const baseDomain = new  URL(baseURL).hostname;
     const currentDomain = new URL(currentURL).hostname;
 
@@ -10,69 +11,79 @@ async function crawlPage(baseURL, currentURL, pages = {}){
         return pages;
     }
 
-    const normalizedURL = new URL(currentURL).href;
+    const normalizedURL = new URL(currentURL);
 
-    if(pages[normalizedURL]){
+    // if we have already visited this page
+    // just increase the count and dont repeat
+    // the http request
+    if(pages[normalizedURL] > 0){
         pages[normalizedURL]++;
         return pages;
     }
 
-    pages[normalizedURL] = normalizedURL === baseURL ? 0 : 1;
+    // initialize this page in the map since it doesnt exist yet
 
-    const response = await fetch(normalizedURL);
-    const html = await response.text();
-    const dom = new JSDOM(html);
-    const links = dom.window.document.querySelectorAll('a');
+    pages[normalizedURL] = 1;
 
-    for(let link of links){
-        const href = link.getAttribute('href');
+    // fetch and parse the html of the currentURL
+    console.log(`Crawling ${currentURL}`);
 
+    let html = ' ';
 
-        if(!href || href.startsWith('#') || href.toLowerCase().startsWith('javascript')){
-            continue;
+    try {
+        const resp = await fetch(currentURL)
+        if(resp.status > 399){
+            console.log(`Got HTTP error, status code: ${resp.status}`)
+            return pages
         }
-        const nextURL = new URL(href, normalizedURL).href;
-        pages = await crawlPage(baseURL, nextURL, pages);
+        const contentType = resp.headers.get('content-type')
+        if(!contentType.includes('text/html')){
+            console.log(`Got non-html response: ${contentType}`)
+            return pages
+        }
+        htmlBody = await resp.text()
+    } catch (err) {
+        console.log(err.message)
     }
 
-    return pages;
-
+    const nextURLs = getURLsFromHTML(htmlBody, baseURL)
+    for(const nextURL of nextURLs){
+        pages = await crawlPage(baseURL, nextURL, pages)
+    }
+    return pages
 }
 
-async function main(){
-    
+
+function getURLsFromHTML(htmlBody, baseURL){
+    const urls = []
+    const dom = new JSDOM(htmlBody)
+    const aElements = dom.window.document.querySelectorAll('a')
+    for(const aElement of aElements){
+        if(aElement.href.slice(0,1)=== '/'){
+            try{
+                urls.push(new URL(aElement.href, baseURL).href)
+            }catch(err){
+                console.log(`${err.message}: ${aElement.href}`)
+            }
+        } else {
+            try {
+                urls.push(new URL(aElement.href).href)
+            } catch (err){
+                console.log(`${err.message}: ${aElement.href}`)
+            }
+        }
+    }
+    return urls
 }
 
-// function getURLsFromHTML(htmlBody, baseURL){
-//     const urls = []
-//     const dom = new JSDOM(htmlBody)
-//     const aElements = dom.window.document.querySelectorAll('a')
-//     for(const aElement of aElements){
-//         if(aElement.href.slice(0,1)=== '/'){
-//             try{
-//                 urls.push(new URL(aElement.href, baseURL).href)
-//             }catch(err){
-//                 console.log(`${err.message}: ${aElement.href}`)
-//             }
-//         } else {
-//             try {
-//                 urls.push(new URL(aElement.href).href)
-//             } catch (err){
-//                 console.log(`${err.message}: ${aElement.href}`)
-//             }
-//         }
-//     }
-//     return urls
-// }
-
-// function normalizedURL(url){
-//     const urlObj = new URL(url)
-//     let fullPath = `${urlObj.host}${urlObj.pathname}}`
-//     if(fullPath.length > 0 && fullPath.slice(-1) === '/'){
-//         fullPath = fullPath.slice(0, -1)
-//     }
-//     return fullPath
-// }
+function normalizeURL(url){
+    const urlObj = new URL(url)
+    let fullPath = `${urlObj.host}${urlObj.pathname}}`
+    if(fullPath.length > 0 && fullPath.slice(-1) === '/'){
+        fullPath = fullPath.slice(0, -1)
+    }
+    return fullPath
+}
 
 //  async function crawlPage(baseURL, currentURL, pages){
 //     console.log(`Crawling ${url}`)
@@ -100,7 +111,7 @@ async function main(){
 //  }
 
 module.exports = {
-    normalizedURL,
-    getURLsFromHTML,
-    crawlPage
-}
+    crawlPage,
+    normalizeURL,
+    getURLsFromHTML
+  }
